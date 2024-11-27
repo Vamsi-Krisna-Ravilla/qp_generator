@@ -563,10 +563,10 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
     total_width = doc.width
     col_widths = [
         total_width * 0.06,  # Q.No
-        total_width * 0.79,  # Question
-        total_width * 0.05,  # CO
-        total_width * 0.05,  # PO
-        total_width * 0.05   # BTL
+        total_width * 0.75,  # Question
+        total_width * 0.06,  # CO
+        total_width * 0.07,  # PO
+        total_width * 0.06   # BTL
     ]
 
     # Create table headers
