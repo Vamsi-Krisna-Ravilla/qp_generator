@@ -30,11 +30,16 @@ MONTHS = [
 ]
 
 class SubjectType(Enum):
-    PHYSICS = "Physics"
-    CHEMISTRY = "Chemistry"
-    BEEE = "BEEE"
-    BCME = "BCME"
+    BEEE = "Basic Electrical & Electronics Engineering (RV23991T07)"
+    BCME = "Basic Civil & Mechanical Engineering (RV23991T04)"
     EG = "Engineering Graphics (RV23991T08)"
+    PHYSICS = "Engineering Physics (RV23991T06)"
+    CHEMISTRY = "Engineering Chemistry (RV23991T02)"
+    LINEAR_ALGEBRA_AND_CALCULUS="Linear Algebra & Calculus (RV23991T03)"
+    INTRODUCTION_TO_PROGRAMMING="Introduction to Programming (RV23991T05)"
+    ENGLISH="Communicative English (RV23991T01)"
+    
+    
 
 class ExamType(Enum):
     MID1_2 = "mid1 (Unit- 1, 2)"
