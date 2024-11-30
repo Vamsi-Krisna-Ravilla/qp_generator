@@ -80,9 +80,9 @@ class SubjectType(Enum):
     EG = "Engineering Graphics (RV23991T08)"
     PHYSICS = "Engineering Physics (RV23991T06)"
     CHEMISTRY = "Engineering Chemistry (RV23991T02)"
-    LINEAR_ALGEBRA_AND_CALCULUS="Linear Algebra & Calculus (RV23991T03)"
-    INTRODUCTION_TO_PROGRAMMING="Introduction to Programming (RV23991T05)"
-    ENGLISH="Communicative English (RV23991T01)"
+    LINEAR_ALGEBRA_AND_CALCULUS = "Linear Algebra & Calculus (RV23991T03)"
+    INTRODUCTION_TO_PROGRAMMING = "Introduction to Programming (RV23991T05)"
+    ENGLISH = "Communicative English (RV23991T01)"
 
 class ExamType(Enum):
     MID1_2 = "mid1 (Unit- 1, 2)"
@@ -91,6 +91,7 @@ class ExamType(Enum):
     MID2_5_5 = "mid2 (Unit- 3.2, 4 & 5)"
     REGULAR = "regular"
     SUPPLY = "supply"
+
 # Subject mapping based on academic level and semester
 SEMESTER_SUBJECTS = {
     ("I B.Tech", "I"): [
@@ -247,6 +248,7 @@ for subject in SubjectType:
 for subject in SubjectType:
     if (subject, ExamType.REGULAR) in PATTERNS:
         PATTERNS[(subject, ExamType.SUPPLY)] = PATTERNS[(subject, ExamType.REGULAR)]
+
 def get_google_drive_file_id(url: str) -> str:
     """Extract file ID from Google Drive URL"""
     patterns = [
@@ -318,6 +320,88 @@ def extract_question_and_url(text: str) -> tuple:
                 
     question = '\n'.join(lines).strip()
     return question, image_url
+
+def process_math_formatting(text: str) -> str:
+    """Convert Excel-style subscripts and superscripts to ReportLab-compatible formatting"""
+    if pd.isna(text):
+        return ""
+    
+    # Pre-process text to normalize spaces
+    text = text.strip()
+    
+    # First pass: Handle explicit unicode superscripts/subscripts
+    superscript_map = {
+        '²': '<sup>2</sup>',
+        '³': '<sup>3</sup>',
+        '⁴': '<sup>4</sup>',
+        '⁵': '<sup>5</sup>',
+        '⁶': '<sup>6</sup>',
+        '⁷': '<sup>7</sup>',
+        '⁸': '<sup>8</sup>',
+        '⁹': '<sup>9</sup>'
+    }
+    subscript_map = {
+        '₀': '<sub>0</sub>', '₁': '<sub>1</sub>', '₂': '<sub>2</sub>',
+        '₃': '<sub>3</sub>', '₄': '<sub>4</sub>', '₅': '<sub>5</sub>',
+        '₆': '<sub>6</sub>', '₇': '<sub>7</sub>', '₈': '<sub>8</sub>',
+        '₉': '<sub>9</sub>'
+    }
+    
+    for sup, repl in superscript_map.items():
+        text = text.replace(sup, repl)
+    for sub, repl in subscript_map.items():
+        text = text.replace(sub, repl)
+
+    # First identify chemistry formulas vs math equations
+    def is_chemistry_formula(string):
+        # Check for common patterns in chemistry formulas like N2, O2, H2O, etc.
+        chemistry_pattern = r'\b[A-Z][a-z]?\d+\b'
+        chemistry_keywords = ["molecular", "molecule", "orbital", "Bond", "magnetic"]
+        return bool(re.search(chemistry_pattern, string)) and any(keyword in string for keyword in chemistry_keywords)
+
+    if is_chemistry_formula(text):
+        # Handle chemistry formulas (make numbers subscript)
+        text = re.sub(r'([A-Z][a-z]?)(\d+)', r'\1<sub>\2</sub>', text)
+    else:
+        # Handle mathematical expressions (make all numbers after letters superscript)
+        text = re.sub(r'([a-zA-Z])(\d+)(?=[\+\-\s]|$|\)|\Z)', r'\1<sup>\2</sup>', text)
+    
+    # Handle special characters and symbols
+    replacements = {
+        '°': '&#176;',  # degree symbol
+        '±': '&#177;',  # plus-minus
+        '→': '&#8594;', # right arrow
+        '←': '&#8592;', # left arrow
+        'α': '&#945;',  # alpha
+        'β': '&#946;',  # beta
+        'γ': '&#947;',  # gamma
+        'Δ': '&#916;',  # delta
+        'π': '&#960;',  # pi
+        '∞': '&#8734;', # infinity
+    }
+    
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    
+    return text
+
+class CustomDocTemplate(SimpleDocTemplate):
+    def __init__(self, *args, **kwargs):
+        self.top_margin_first = kwargs.pop('top_margin_first', 0)
+        self.top_margin_rest = kwargs.pop('top_margin_rest', 30)
+        self.encryption = kwargs.pop('encryption', None)
+        kwargs['topMargin'] = self.top_margin_first
+        
+        if self.encryption:
+            kwargs['encrypt'] = self.encryption
+            
+        SimpleDocTemplate.__init__(self, *args, **kwargs)
+        
+    def handle_pageBegin(self):
+        """Modify top margin based on page number"""
+        self._calc = self.canv.getPageNumber() > 1
+        self.topMargin = self.top_margin_rest if self._calc else self.top_margin_first
+        return super().handle_pageBegin()
 
 def create_header_config():
     """Create and get header configuration from user input"""
@@ -408,27 +492,7 @@ def select_questions(df: pd.DataFrame, subject: SubjectType, exam: ExamType) -> 
             part_b = pd.concat([part_b, questions])
     
     return part_a, part_b
-# Add this class just before the generate_pdf_with_header function
-# Update the CustomDocTemplate class
-class CustomDocTemplate(SimpleDocTemplate):
-    def __init__(self, *args, **kwargs):
-        self.top_margin_first = kwargs.pop('top_margin_first', 0)  # Default 1 inch for first page
-        self.top_margin_rest = kwargs.pop('top_margin_rest', 30)   # Much larger margin for rest
-        self.encryption = kwargs.pop('encryption', None)
-        kwargs['topMargin'] = self.top_margin_first  # Set initial top margin
-        
-        if self.encryption:
-            kwargs['encrypt'] = self.encryption
-            
-        SimpleDocTemplate.__init__(self, *args, **kwargs)
-        
-    def handle_pageBegin(self):
-        """Modify top margin based on page number"""
-        self._calc = self.canv.getPageNumber() > 1  # Check if we're past the first page
-        self.topMargin = self.top_margin_rest if self._calc else self.top_margin_first
-        return super().handle_pageBegin()
 
-# Update the generate_pdf_with_header function
 def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame, 
                            subject: SubjectType, exam: ExamType, 
                            header_info: dict, college_logo_url: str,
@@ -438,8 +502,8 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
     
     # Create encryption object
     encryption = StandardEncryption(
-        userPassword='admin'.encode('utf-8'),
-        ownerPassword='admin123'.encode('utf-8'),  # Different owner password for security
+        userPassword='a'.encode('utf-8'),
+        ownerPassword='admin123'.encode('utf-8'),
         strength=128,
         canPrint=1,
         canModify=0,
@@ -454,17 +518,27 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
         bottomMargin=30,
         leftMargin=30,
         rightMargin=30,
-        top_margin_first=0,    # Smaller margin for first page
-        top_margin_rest=30,    # Larger margin for rest of pages
-        encryption=encryption   # Pass encryption object
+        top_margin_first=0,
+        top_margin_rest=30,
+        encryption=encryption
     )
     
-    
-    # Rest of the function remains the same
     styles = getSampleStyleSheet()
     story = []
 
-    # Custom styles including bold section headers
+    # Custom styles
+    styles.add(ParagraphStyle(
+        'QuestionStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        leading=14,
+        spaceBefore=6,
+        spaceAfter=6,
+        wordWrap='CJK',
+        allowWidows=1,
+        allowOrphans=1
+    ))
+
     styles.add(ParagraphStyle(
         'CollegeHeader',
         parent=styles['Title'],
@@ -498,16 +572,6 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
     ))
     
     styles.add(ParagraphStyle(
-        'QuestionStyle',
-        parent=styles['Normal'],
-        fontSize=11,
-        leading=14,
-        spaceBefore=6,
-        spaceAfter=6,
-        wordWrap='CJK'
-    ))
-    
-    styles.add(ParagraphStyle(
         'SectionHeader',
         parent=styles['Normal'],
         fontSize=12,
@@ -517,91 +581,11 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
         spaceAfter=6
     ))
 
-    # Default logo URL if none provided
-    default_logo_url = "https://drive.google.com/file/d/11cfL6HFoSRsCcFWdSzwNuLibTyvASLk8/view?usp=drive_link"
-    logo_url_to_use = college_logo_url if college_logo_url and college_logo_url.strip() else default_logo_url
-
-    # Add college logo
-    try:
-        img_data = get_image_from_url(logo_url_to_use)
-        img = Image.open(img_data)
-        
-        if img.mode == 'RGBA':
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3])
-            img = background
-        elif img.mode not in ['RGB', 'L']:
-            img = img.convert('RGB')
-            
-        aspect = img.width / img.height
-        desired_width = 540
-        height = int(desired_width / aspect)
-        
-        img_byte_arr = BytesIO()
-        img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        img_reader = BytesIO(img_byte_arr)
-        logo = RLImage(img_reader, width=desired_width, height=height)
-        story.append(logo)
-    except Exception as e:
-        st.warning(f"Error loading logo image: {str(e)}. Using default spacing.")
-        story.append(Spacer(1, 36))
-
-    # Header content
-    story.append(Spacer(1, 2))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
-    story.append(Spacer(1, 2))
-
-    exam_header = (
-        f"{header_info['academic_level']} {header_info['semester']} SEMESTER "
-        f"{header_info['exam_type']} EXAMINATION {header_info['month_year']}"
-    )
-    story.append(Paragraph(exam_header, styles['ExamHeader']))
-
-    # Determine time and marks based on exam type
-    if header_info['exam_type'] in ["I MID", "II MID"]:
-        exam_time = "2 Hours"
-        max_marks = "25M"
-    else:
-        exam_time = "3 Hours"
-        max_marks = "70M"
-
-    # Create table for details
-    branch_text = f"Branch: {', '.join(header_info['branches'])}"
-    date_text = f"Date: {header_info['date']}"
-    subject_text = f"Subject: {subject.value}"
-    
-    data = [
-        [Paragraph(branch_text, styles['DetailsLeft']), 
-         Paragraph("Regulation: RV23", styles['DetailsRight'])],
-        [Paragraph(date_text, styles['DetailsLeft']), 
-         Paragraph(f"Max.Marks: {max_marks}", styles['DetailsRight'])],
-        [Paragraph(subject_text, styles['DetailsLeft']), 
-         Paragraph(f"Time: {exam_time}", styles['DetailsRight'])]
-    ]
-    
-    col_widths = [doc.width * 0.7, doc.width * 0.3]
-    details_table = Table(data, colWidths=col_widths)
-    details_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
-    story.append(details_table)
-    
-    story.append(Spacer(1, 2))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
-    story.append(Spacer(1, 2))
-
     def create_question_cell(question_text: str, image_url: str = None) -> List:
         elements = []
         if question_text:
-            text = Paragraph(question_text, styles['QuestionStyle'])
+            formatted_text = process_math_formatting(question_text)
+            text = Paragraph(formatted_text, styles['QuestionStyle'])
             elements.append(text)
 
         if image_url:
@@ -629,6 +613,83 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
                 elements.append(Paragraph(f"[Error loading image: {str(e)}]", styles['Normal']))
 
         return elements
+
+    # Add the logo
+    default_logo_url = "https://drive.google.com/file/d/11cfL6HFoSRsCcFWdSzwNuLibTyvASLk8/view?usp=drive_link"
+    logo_url_to_use = college_logo_url if college_logo_url and college_logo_url.strip() else default_logo_url
+
+    try:
+        img_data = get_image_from_url(logo_url_to_use)
+        img = Image.open(img_data)
+        
+        if img.mode == 'RGBA':
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[3])
+            img = background
+        elif img.mode not in ['RGB', 'L']:
+            img = img.convert('RGB')
+            
+        aspect = img.width / img.height
+        desired_width = 540
+        height = int(desired_width / aspect)
+        
+        img_byte_arr = BytesIO()
+        img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        img_reader = BytesIO(img_byte_arr)
+        logo = RLImage(img_reader, width=desired_width, height=height)
+        story.append(logo)
+    except Exception as e:
+        story.append(Spacer(1, 36))
+
+    # Header content
+    story.append(Spacer(1, 2))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
+    story.append(Spacer(1, 2))
+
+    exam_header = (
+        f"{header_info['academic_level']} {header_info['semester']} SEMESTER "
+        f"{header_info['exam_type']} EXAMINATION {header_info['month_year']}"
+    )
+    story.append(Paragraph(exam_header, styles['ExamHeader']))
+
+    # Determine time and marks
+    exam_time = "2 Hours" if header_info['exam_type'] in ["I MID", "II MID"] else "3 Hours"
+    max_marks = "25M" if header_info['exam_type'] in ["I MID", "II MID"] else "70M"
+
+    # Create table for details
+    branch_text = f"Branch: {', '.join(header_info['branches'])}"
+    date_text = f"Date: {header_info['date']}"
+    subject_text = f"Subject: {subject.value}"
+    
+    data = [
+        [Paragraph(branch_text, styles['DetailsLeft']), 
+         Paragraph("Regulation: RV23", styles['DetailsRight'])],
+        [Paragraph(date_text, styles['DetailsLeft']), 
+         Paragraph(f"Max.Marks: {max_marks}", styles['DetailsRight'])],
+        [Paragraph(subject_text, styles['DetailsLeft']), 
+         Paragraph(f"Time: {exam_time}", styles['DetailsRight'])]
+    ]
+
+    # Calculate column widths
+    total_width = doc.width
+    col_widths = [total_width * 0.7, total_width * 0.3]
+    details_table = Table(data, colWidths=col_widths)
+    details_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    
+    story.append(details_table)
+    story.append(Spacer(1, 2))
+    # story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
+    story.append(Spacer(1, 2))
 
     # Define column widths for question table
     total_width = doc.width
@@ -743,8 +804,8 @@ def check_password():
 
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state["username"].strip(), "admin") and \
-           hmac.compare_digest(st.session_state["password"].strip(), "admin"):
+        if hmac.compare_digest(st.session_state["username"].strip(), "a") and \
+           hmac.compare_digest(st.session_state["password"].strip(), "a"):
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # Don't store password
             del st.session_state["username"]  # Don't store username
@@ -773,10 +834,10 @@ def check_password():
         # Password correct
         return True
 
-if not check_password():
-    st.stop()  # Do not continue if check_password is False
-
 def main():
+    if not check_password():
+        st.stop()
+
     st.markdown('<div class="main-header"><h1>📝 Question Paper Generator</h1></div>', 
                 unsafe_allow_html=True)
 
@@ -824,7 +885,24 @@ def main():
     
     if uploaded_file:
         try:
+            # Read the Excel file
             df = pd.read_excel(uploaded_file)
+            
+            # Clean up and preprocess the data
+            if 'BTL' in df.columns:
+                # Convert BTL column to string type to ensure consistency
+                df['BTL'] = df['BTL'].astype(str)
+                # Remove any whitespace
+                df['BTL'] = df['BTL'].str.strip()
+            
+            # Similarly handle CO and PO columns if they exist
+            if 'CO' in df.columns:
+                df['CO'] = df['CO'].astype(str)
+                df['CO'] = df['CO'].str.strip()
+            
+            if 'PO' in df.columns:
+                df['PO'] = df['PO'].astype(str)
+                df['PO'] = df['PO'].str.strip()
             
             # Show question bank overview
             st.subheader("📊 Question Bank Overview")
@@ -932,7 +1010,7 @@ def main():
                                 f"{subject.value}_{exam.value}_question_paper.pdf",
                                 "application/pdf"
                             )
-                            st.info("📝 PDF Password: admin")
+                            st.info("📝 PDF Password: a")
                         
                         with col2:
                             st.download_button(
