@@ -62,7 +62,7 @@ st.markdown("""
 # Constants
 ACADEMIC_LEVELS = [
     "I B.Tech", "II B.Tech", "III B.Tech", "IV B.Tech",
-    "I M.Tech", "II M.Tech", "I MCA", "II MCA", "I BCA", "II BCA", "III BCA"
+    "I M.Tech", "II M.Tech", "I MCA", "II MCA","I BCA","II BCA","III BCA"
 ]
 
 BRANCHES = [
@@ -80,18 +80,17 @@ class SubjectType(Enum):
     EG = "Engineering Graphics (RV23991T08)"
     PHYSICS = "Engineering Physics (RV23991T06)"
     CHEMISTRY = "Engineering Chemistry (RV23991T02)"
-    LINEAR_ALGEBRA_AND_CALCULUS = "Linear Algebra & Calculus (RV23991T03)"
-    INTRODUCTION_TO_PROGRAMMING = "Introduction to Programming (RV23991T05)"
-    ENGLISH = "Communicative English (RV23991T01)"
+    LINEAR_ALGEBRA_AND_CALCULUS="Linear Algebra & Calculus (RV23991T03)"
+    INTRODUCTION_TO_PROGRAMMING="Introduction to Programming (RV23991T05)"
+    ENGLISH="Communicative English (RV23991T01)"
 
 class ExamType(Enum):
     MID1_2 = "mid1 (Unit- 1, 2)"
-    MID1_2_5 = "mid1 (Unit- 1, 2 & 2.5)"
+    MID1_2_5 = "mid1 (Unit- 1, 2 & 3.1)"
     MID2_3_4_5 = "mid2 (Unit- 3, 4 & 5)"
     MID2_5_5 = "mid2 (Unit- 3.2, 4 & 5)"
     REGULAR = "regular"
     SUPPLY = "supply"
-
 # Subject mapping based on academic level and semester
 SEMESTER_SUBJECTS = {
     ("I B.Tech", "I"): [
@@ -99,9 +98,17 @@ SEMESTER_SUBJECTS = {
         SubjectType.CHEMISTRY,
         SubjectType.BCME,
         SubjectType.INTRODUCTION_TO_PROGRAMMING,
-        SubjectType.ENGLISH
+        SubjectType.ENGLISH,
+        SubjectType.PHYSICS,
+        SubjectType.BEEE,
+        SubjectType.EG
     ],
     ("I B.Tech", "II"): [
+        SubjectType.LINEAR_ALGEBRA_AND_CALCULUS,
+        SubjectType.CHEMISTRY,
+        SubjectType.BCME,
+        SubjectType.INTRODUCTION_TO_PROGRAMMING,
+        SubjectType.ENGLISH,
         SubjectType.PHYSICS,
         SubjectType.BEEE,
         SubjectType.EG
@@ -240,7 +247,6 @@ for subject in SubjectType:
 for subject in SubjectType:
     if (subject, ExamType.REGULAR) in PATTERNS:
         PATTERNS[(subject, ExamType.SUPPLY)] = PATTERNS[(subject, ExamType.REGULAR)]
-
 def get_google_drive_file_id(url: str) -> str:
     """Extract file ID from Google Drive URL"""
     patterns = [
@@ -313,332 +319,13 @@ def extract_question_and_url(text: str) -> tuple:
     question = '\n'.join(lines).strip()
     return question, image_url
 
-class CustomDocTemplate(SimpleDocTemplate):
-    """Custom document template handling different margins for first and subsequent pages"""
-    def __init__(self, *args, **kwargs):
-        self.top_margin_first = kwargs.pop('top_margin_first', 30)  
-        self.top_margin_rest = kwargs.pop('top_margin_rest', 300)   
-        self.encryption = kwargs.pop('encryption', None)
-        
-        kwargs['topMargin'] = self.top_margin_first
-        if self.encryption:
-            kwargs['encrypt'] = self.encryption
-            
-        SimpleDocTemplate.__init__(self, *args, **kwargs)
-        self._current_frame = None
-        
-    def beforePage(self):
-        """Set margins before page rendering"""
-        self.topMargin = self.top_margin_first if self.page == 1 else self.top_margin_rest
-
-def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame, 
-                           subject: SubjectType, exam: ExamType, 
-                           header_info: dict, college_logo_url: str,
-                           max_image_width: int = 410) -> bytes:
-    """Generate PDF with header and properly scaled images"""
-    buffer = BytesIO()
-    
-    # Create encryption object with strong settings
-    encryption = StandardEncryption(
-        userPassword='admin'.encode('utf-8'),
-        ownerPassword='admin123'.encode('utf-8'),
-        strength=128,
-        canPrint=1,
-        canModify=0,
-        canCopy=0,
-        canAnnotate=0
-    )
-    
-    # Initialize document with optimized settings
-    doc = CustomDocTemplate(
-        buffer,
-        pagesize=A4,
-        bottomMargin=30,
-        leftMargin=30,
-        rightMargin=30,
-        top_margin_first=30,     # Minimal top margin for first page
-        top_margin_rest=300,     # Larger margin for subsequent pages
-        encryption=encryption
-    )
-    
-    styles = getSampleStyleSheet()
-    story = []
-
-    # Custom styles with optimized settings
-    styles.add(ParagraphStyle(
-        'CollegeHeader',
-        parent=styles['Title'],
-        fontSize=16,
-        alignment=1,
-        spaceAfter=2
-    ))
-    
-    styles.add(ParagraphStyle(
-        'ExamHeader',
-        parent=styles['Title'],
-        fontSize=14,
-        alignment=1,
-        spaceAfter=2
-    ))
-    
-    styles.add(ParagraphStyle(
-        'DetailsLeft',
-        parent=styles['Normal'],
-        fontSize=11,
-        alignment=0,
-        leftIndent=20
-    ))
-    
-    styles.add(ParagraphStyle(
-        'DetailsRight',
-        parent=styles['Normal'],
-        fontSize=11,
-        alignment=2,
-        rightIndent=20
-    ))
-    
-    styles.add(ParagraphStyle(
-        'QuestionStyle',
-        parent=styles['Normal'],
-        fontSize=11,
-        leading=14,
-        spaceBefore=6,
-        spaceAfter=6,
-        wordWrap='CJK'
-    ))
-    
-    styles.add(ParagraphStyle(
-        'SectionHeader',
-        parent=styles['Normal'],
-        fontSize=12,
-        fontName='Helvetica-Bold',
-        alignment=1,
-        spaceBefore=6,
-        spaceAfter=6
-    ))
-
-    # Handle college logo
-    default_logo_url = "https://drive.google.com/file/d/11cfL6HFoSRsCcFWdSzwNuLibTyvASLk8/view?usp=drive_link"
-    logo_url_to_use = college_logo_url if college_logo_url and college_logo_url.strip() else default_logo_url
-
-    try:
-        img_data = get_image_from_url(logo_url_to_use)
-        img = Image.open(img_data)
-        
-        if img.mode == 'RGBA':
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3])
-            img = background
-        elif img.mode not in ['RGB', 'L']:
-            img = img.convert('RGB')
-            
-        aspect = img.width / img.height
-        desired_width = 540
-        height = int(desired_width / aspect)
-        
-        img_byte_arr = BytesIO()
-        img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        img_reader = BytesIO(img_byte_arr)
-        logo = RLImage(img_reader, width=desired_width, height=height)
-        story.append(logo)
-    except Exception as e:
-        st.warning(f"Error loading logo image: {str(e)}. Using default spacing.")
-        story.append(Spacer(1, 36))
-
-    # Add header content with minimal spacing
-    story.append(Spacer(1, 2))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
-    story.append(Spacer(1, 2))
-
-    exam_header = (
-        f"{header_info['academic_level']} {header_info['semester']} SEMESTER "
-        f"{header_info['exam_type']} EXAMINATION {header_info['month_year']}"
-    )
-    story.append(Paragraph(exam_header, styles['ExamHeader']))
-
-    # Set exam details based on type
-    exam_time = "2 Hours" if header_info['exam_type'] in ["I MID", "II MID"] else "3 Hours"
-    max_marks = "25M" if header_info['exam_type'] in ["I MID", "II MID"] else "70M"
-
-    # Create details table with optimized layout
-    data = [
-        [Paragraph(f"Branch: {', '.join(header_info['branches'])}", styles['DetailsLeft']), 
-         Paragraph("Regulation: RV23", styles['DetailsRight'])],
-        [Paragraph(f"Date: {header_info['date']}", styles['DetailsLeft']), 
-         Paragraph(f"Max.Marks: {max_marks}", styles['DetailsRight'])],
-        [Paragraph(f"Subject: {subject.value}", styles['DetailsLeft']), 
-         Paragraph(f"Time: {exam_time}", styles['DetailsRight'])]
-    ]
-    
-    # Create and style details table
-    details_table = Table(data, colWidths=[doc.width * 0.7, doc.width * 0.3])
-    details_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
-    story.append(details_table)
-    
-    story.append(Spacer(1, 2))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
-    story.append(Spacer(1, 2))
-
-    # Question table setup
-    def create_question_cell(question_text: str, image_url: str = None) -> List:
-        elements = []
-        if question_text:
-            text = Paragraph(question_text, styles['QuestionStyle'])
-            elements.append(text)
-
-        if image_url:
-            try:
-                img_data = get_image_from_url(image_url)
-                img = Image.open(img_data)
-                
-                if img.mode == 'RGBA':
-                    background = Image.new('RGB', img.size, (255, 255, 255))
-                    background.paste(img, mask=img.split()[3])
-                    img = background
-                elif img.mode not in ['RGB', 'L']:
-                    img = img.convert('RGB')
-                
-                width, height = configure_question_image(img, max_image_width)
-                
-                img_byte_arr = BytesIO()
-                img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
-                img_byte_arr = img_byte_arr.getvalue()
-                
-                img_reader = BytesIO(img_byte_arr)
-                elements.append(Spacer(1, 6))
-                elements.append(RLImage(img_reader, width=width, height=height))
-            except Exception as e:
-                elements.append(Paragraph(f"[Error loading image: {str(e)}]", styles['Normal']))
-
-        return elements
-
-    # Define column widths for question table
-    total_width = doc.width
-    col_widths = [
-        total_width * 0.06,  # Q.No
-        total_width * 0.79,  # Question
-        total_width * 0.05,  # CO
-        total_width * 0.05,  # PO
-        total_width * 0.05   # BTL
-    ]
-
-    # Create table headers
-    headers = ['Q.No', 'Question', 'CO', 'PO', 'BTL']
-    table_data = [headers]
-    pattern = PATTERNS.get((subject, exam))
-
-    def add_question_to_table(q_num, question_row):
-        """Add question to table with enhanced formatting"""
-        if isinstance(question_row, pd.Series):
-            question, image_url = extract_question_and_url(question_row['question'])
-            co = str(question_row['CO']) if pd.notna(question_row['CO']) else ""
-            po = str(question_row['PO']) if pd.notna(question_row['PO']) else ""
-            btl = str(question_row['BTL']) if pd.notna(question_row['BTL']) else ""
-        else:
-            question, image_url = extract_question_and_url(question_row.question)
-            co = str(question_row.CO) if hasattr(question_row, 'CO') and pd.notna(question_row.CO) else ""
-            po = str(question_row.PO) if hasattr(question_row, 'PO') and pd.notna(question_row.PO) else ""
-            btl = str(question_row.BTL) if hasattr(question_row, 'BTL') and pd.notna(question_row.BTL) else ""
-
-        cell_content = create_question_cell(question, image_url)
-        return [str(q_num), cell_content, co, po, btl]
-
-    # Handle Engineering Graphics separately
-    if subject == SubjectType.EG:
-        q_num = 1
-        questions = pd.concat([part_a, part_b]) if not part_a.empty else part_b
-        
-        for i in range(0, len(questions), 2):
-            if i+1 < len(questions):
-                table_data.append(add_question_to_table(q_num, questions.iloc[i]))
-                table_data.append(['', Paragraph('(OR)', styles['QuestionStyle']), '', '', ''])
-                table_data.append(add_question_to_table(f"{q_num} a", questions.iloc[i+1]))
-                q_num += 1
-    else:
-        # Part A with bold header
-        if not part_a.empty:
-            marks_text = f"<b>PART-A :   ANSWER ALL QUESTIONS  :  ({pattern.marks_a[0]}×{pattern.marks_a[1]}={pattern.marks_a[0]*pattern.marks_a[1]}M)</b>"
-            table_data.append(['', Paragraph(marks_text, styles['SectionHeader']), '', '', ''])
-            part_a_header_row = len(table_data) - 1
-            
-            sorted_part_a = part_a.sort_values(['unit', 'question'])
-            for idx, row in enumerate(sorted_part_a.itertuples()):
-                question_letter = f"1.{chr(97+idx)})"
-                table_data.append(add_question_to_table(question_letter, row))
-
-        # Part B with bold header
-        if not part_b.empty:
-            marks_text = f"<b>PART-B : ANSWER ONE QUESTION FROM EACH UNIT : ({pattern.marks_b[0]}×{pattern.marks_b[1]}={pattern.marks_b[0]*pattern.marks_b[1]}M)</b>"
-            table_data.append(['', Paragraph(marks_text, styles['SectionHeader']), '', '', ''])
-            part_b_header_row = len(table_data) - 1
-            
-            sorted_part_b = part_b.sort_values('unit')
-            q_num = 2
-            for i in range(0, len(sorted_part_b), 2):
-                if i+1 < len(sorted_part_b):
-                    table_data.append(add_question_to_table(q_num, sorted_part_b.iloc[i]))
-                    table_data.append(['', Paragraph('(OR)', styles['QuestionStyle']), '', '', ''])
-                    table_data.append(add_question_to_table(f"{q_num} a", sorted_part_b.iloc[i+1]))
-                    q_num += 1
-
-    # Create and style the question table
-    question_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    table_style = [
-        ('BOX', (0, 0), (-1, -1), 1.0, colors.black),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
-        
-        # Alignment styles
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
-        ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        
-        # Font styles
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
-        
-        # Padding
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        
-        # Header background
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.black),
-    ]
-
-    # Add background color for PART-A and PART-B headers if not EG subject
-    if subject != SubjectType.EG:
-        if not part_a.empty:
-            table_style.append(('BACKGROUND', (0, part_a_header_row), (-1, part_a_header_row), colors.lightgrey))
-        if not part_b.empty:
-            table_style.append(('BACKGROUND', (0, part_b_header_row), (-1, part_b_header_row), colors.lightgrey))
-
-    question_table.setStyle(TableStyle(table_style))
-    story.append(question_table)
-    
-    # Build the PDF
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-
 def create_header_config():
     """Create and get header configuration from user input"""
     st.markdown('<div class="section-header"><h2>📝 Paper Configuration</h2></div>', 
                 unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
+    
     with col1:
         academic_level = st.selectbox("Academic Level", ACADEMIC_LEVELS)
         semester = st.selectbox("Semester", ["I", "II"])
@@ -721,6 +408,335 @@ def select_questions(df: pd.DataFrame, subject: SubjectType, exam: ExamType) -> 
             part_b = pd.concat([part_b, questions])
     
     return part_a, part_b
+# Add this class just before the generate_pdf_with_header function
+# Update the CustomDocTemplate class
+class CustomDocTemplate(SimpleDocTemplate):
+    def __init__(self, *args, **kwargs):
+        self.top_margin_first = kwargs.pop('top_margin_first', 0)  # Default 1 inch for first page
+        self.top_margin_rest = kwargs.pop('top_margin_rest', 30)   # Much larger margin for rest
+        self.encryption = kwargs.pop('encryption', None)
+        kwargs['topMargin'] = self.top_margin_first  # Set initial top margin
+        
+        if self.encryption:
+            kwargs['encrypt'] = self.encryption
+            
+        SimpleDocTemplate.__init__(self, *args, **kwargs)
+        
+    def handle_pageBegin(self):
+        """Modify top margin based on page number"""
+        self._calc = self.canv.getPageNumber() > 1  # Check if we're past the first page
+        self.topMargin = self.top_margin_rest if self._calc else self.top_margin_first
+        return super().handle_pageBegin()
+
+# Update the generate_pdf_with_header function
+def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame, 
+                           subject: SubjectType, exam: ExamType, 
+                           header_info: dict, college_logo_url: str,
+                           max_image_width: int = 410) -> bytes:
+    """Generate PDF with header and properly scaled images"""
+    buffer = BytesIO()
+    
+    # Create encryption object
+    encryption = StandardEncryption(
+        userPassword='admin'.encode('utf-8'),
+        ownerPassword='admin123'.encode('utf-8'),  # Different owner password for security
+        strength=128,
+        canPrint=1,
+        canModify=0,
+        canCopy=0,
+        canAnnotate=0
+    )
+    
+    # Initialize document with correct margins and encryption
+    doc = CustomDocTemplate(
+        buffer,
+        pagesize=A4,
+        bottomMargin=30,
+        leftMargin=30,
+        rightMargin=30,
+        top_margin_first=0,    # Smaller margin for first page
+        top_margin_rest=30,    # Larger margin for rest of pages
+        encryption=encryption   # Pass encryption object
+    )
+    
+    
+    # Rest of the function remains the same
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Custom styles including bold section headers
+    styles.add(ParagraphStyle(
+        'CollegeHeader',
+        parent=styles['Title'],
+        fontSize=16,
+        alignment=1,
+        spaceAfter=2
+    ))
+    
+    styles.add(ParagraphStyle(
+        'ExamHeader',
+        parent=styles['Title'],
+        fontSize=14,
+        alignment=1,
+        spaceAfter=2
+    ))
+    
+    styles.add(ParagraphStyle(
+        'DetailsLeft',
+        parent=styles['Normal'],
+        fontSize=11,
+        alignment=0,
+        leftIndent=20
+    ))
+    
+    styles.add(ParagraphStyle(
+        'DetailsRight',
+        parent=styles['Normal'],
+        fontSize=11,
+        alignment=2,
+        rightIndent=20
+    ))
+    
+    styles.add(ParagraphStyle(
+        'QuestionStyle',
+        parent=styles['Normal'],
+        fontSize=11,
+        leading=14,
+        spaceBefore=6,
+        spaceAfter=6,
+        wordWrap='CJK'
+    ))
+    
+    styles.add(ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Normal'],
+        fontSize=12,
+        fontName='Helvetica-Bold',
+        alignment=1,
+        spaceBefore=6,
+        spaceAfter=6
+    ))
+
+    # Default logo URL if none provided
+    default_logo_url = "https://drive.google.com/file/d/11cfL6HFoSRsCcFWdSzwNuLibTyvASLk8/view?usp=drive_link"
+    logo_url_to_use = college_logo_url if college_logo_url and college_logo_url.strip() else default_logo_url
+
+    # Add college logo
+    try:
+        img_data = get_image_from_url(logo_url_to_use)
+        img = Image.open(img_data)
+        
+        if img.mode == 'RGBA':
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[3])
+            img = background
+        elif img.mode not in ['RGB', 'L']:
+            img = img.convert('RGB')
+            
+        aspect = img.width / img.height
+        desired_width = 540
+        height = int(desired_width / aspect)
+        
+        img_byte_arr = BytesIO()
+        img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        img_reader = BytesIO(img_byte_arr)
+        logo = RLImage(img_reader, width=desired_width, height=height)
+        story.append(logo)
+    except Exception as e:
+        st.warning(f"Error loading logo image: {str(e)}. Using default spacing.")
+        story.append(Spacer(1, 36))
+
+    # Header content
+    story.append(Spacer(1, 2))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
+    story.append(Spacer(1, 2))
+
+    exam_header = (
+        f"{header_info['academic_level']} {header_info['semester']} SEMESTER "
+        f"{header_info['exam_type']} EXAMINATION {header_info['month_year']}"
+    )
+    story.append(Paragraph(exam_header, styles['ExamHeader']))
+
+    # Determine time and marks based on exam type
+    if header_info['exam_type'] in ["I MID", "II MID"]:
+        exam_time = "2 Hours"
+        max_marks = "25M"
+    else:
+        exam_time = "3 Hours"
+        max_marks = "70M"
+
+    # Create table for details
+    branch_text = f"Branch: {', '.join(header_info['branches'])}"
+    date_text = f"Date: {header_info['date']}"
+    subject_text = f"Subject: {subject.value}"
+    
+    data = [
+        [Paragraph(branch_text, styles['DetailsLeft']), 
+         Paragraph("Regulation: RV23", styles['DetailsRight'])],
+        [Paragraph(date_text, styles['DetailsLeft']), 
+         Paragraph(f"Max.Marks: {max_marks}", styles['DetailsRight'])],
+        [Paragraph(subject_text, styles['DetailsLeft']), 
+         Paragraph(f"Time: {exam_time}", styles['DetailsRight'])]
+    ]
+    
+    col_widths = [doc.width * 0.7, doc.width * 0.3]
+    details_table = Table(data, colWidths=col_widths)
+    details_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    story.append(details_table)
+    
+    story.append(Spacer(1, 2))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
+    story.append(Spacer(1, 2))
+
+    def create_question_cell(question_text: str, image_url: str = None) -> List:
+        elements = []
+        if question_text:
+            text = Paragraph(question_text, styles['QuestionStyle'])
+            elements.append(text)
+
+        if image_url:
+            try:
+                img_data = get_image_from_url(image_url)
+                img = Image.open(img_data)
+                
+                if img.mode == 'RGBA':
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[3])
+                    img = background
+                elif img.mode not in ['RGB', 'L']:
+                    img = img.convert('RGB')
+                
+                width, height = configure_question_image(img, max_image_width)
+                
+                img_byte_arr = BytesIO()
+                img.save(img_byte_arr, format='JPEG', quality=85, optimize=True)
+                img_byte_arr = img_byte_arr.getvalue()
+                
+                img_reader = BytesIO(img_byte_arr)
+                elements.append(Spacer(1, 6))
+                elements.append(RLImage(img_reader, width=width, height=height))
+            except Exception as e:
+                elements.append(Paragraph(f"[Error loading image: {str(e)}]", styles['Normal']))
+
+        return elements
+
+    # Define column widths for question table
+    total_width = doc.width
+    col_widths = [
+        total_width * 0.06,  # Q.No
+        total_width * 0.79,  # Question
+        total_width * 0.05,  # CO
+        total_width * 0.05,  # PO
+        total_width * 0.05   # BTL
+    ]
+
+    # Create table headers
+    headers = ['Q.No', 'Question', 'CO', 'PO', 'BTL']
+    table_data = [headers]
+    pattern = PATTERNS.get((subject, exam))
+
+    def add_question_to_table(q_num, question_row):
+        """Add question to table with enhanced formatting"""
+        if isinstance(question_row, pd.Series):
+            question, image_url = extract_question_and_url(question_row['question'])
+            co = str(question_row['CO']) if pd.notna(question_row['CO']) else ""
+            po = str(question_row['PO']) if pd.notna(question_row['PO']) else ""
+            btl = str(question_row['BTL']) if pd.notna(question_row['BTL']) else ""
+        else:
+            question, image_url = extract_question_and_url(question_row.question)
+            co = str(question_row.CO) if hasattr(question_row, 'CO') and pd.notna(question_row.CO) else ""
+            po = str(question_row.PO) if hasattr(question_row, 'PO') and pd.notna(question_row.PO) else ""
+            btl = str(question_row.BTL) if hasattr(question_row, 'BTL') and pd.notna(question_row.BTL) else ""
+
+        cell_content = create_question_cell(question, image_url)
+        return [str(q_num), cell_content, co, po, btl]
+
+    if subject == SubjectType.EG:
+        q_num = 1
+        questions = pd.concat([part_a, part_b]) if not part_a.empty else part_b
+        
+        for i in range(0, len(questions), 2):
+            if i+1 < len(questions):
+                table_data.append(add_question_to_table(q_num, questions.iloc[i]))
+                table_data.append(['', Paragraph('<b>(OR)</b>', styles['QuestionStyle']), '', '', ''])
+                table_data.append(add_question_to_table(q_num+1, questions.iloc[i+1]))
+                q_num += 2
+    else:
+        # Part A with bold header
+        if not part_a.empty:
+            marks_text = f"<b>PART-A :   ANSWER ALL QUESTIONS  :  ({pattern.marks_a[0]}×{pattern.marks_a[1]}={pattern.marks_a[0]*pattern.marks_a[1]}M)</b>"
+            table_data.append(['', Paragraph(marks_text, styles['SectionHeader']), '', '', ''])
+            part_a_header_row = len(table_data) - 1
+            
+            sorted_part_a = part_a.sort_values(['unit', 'question'])
+            for idx, row in enumerate(sorted_part_a.itertuples()):
+                question_letter = f"1.{chr(97+idx)})"
+                table_data.append(add_question_to_table(question_letter, row))
+
+        # Part B with bold header
+        if not part_b.empty:
+            marks_text = f"<b>PART-B : ANSWER ONE QUESTION FROM EACH UNIT : ({pattern.marks_b[0]}×{pattern.marks_b[1]}={pattern.marks_b[0]*pattern.marks_b[1]}M)</b>"
+            table_data.append(['', Paragraph(marks_text, styles['SectionHeader']), '', '', ''])
+            part_b_header_row = len(table_data) - 1
+            
+            sorted_part_b = part_b.sort_values('unit')
+            q_num = 2
+            for i in range(0, len(sorted_part_b), 2):
+                if i+1 < len(sorted_part_b):
+                    table_data.append(add_question_to_table(q_num, sorted_part_b.iloc[i]))
+                    table_data.append(['', Paragraph('<b>(OR)</b>', styles['QuestionStyle']), '', '', ''])
+                    table_data.append(add_question_to_table(q_num+1, sorted_part_b.iloc[i+1]))
+                    q_num += 2
+
+    # Create and style the table
+    question_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table_style = [
+        ('BOX', (0, 0), (-1, -1), 1.0, colors.black),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
+        
+        # Alignment styles
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        
+        # Font styles
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        
+        # Padding
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        
+        # Header background
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.black),
+    ]
+
+    # Add background color for PART-A and PART-B headers if not EG subject
+    if subject != SubjectType.EG:
+        if not part_a.empty:
+            table_style.append(('BACKGROUND', (0, part_a_header_row), (-1, part_a_header_row), colors.lightgrey))
+        if not part_b.empty:
+            table_style.append(('BACKGROUND', (0, part_b_header_row), (-1, part_b_header_row), colors.lightgrey))
+
+    question_table.setStyle(TableStyle(table_style))
+    story.append(question_table)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 def check_password():
     """Returns `True` if the user had the correct password."""
@@ -757,10 +773,10 @@ def check_password():
         # Password correct
         return True
 
-def main():
-    if not check_password():
-        st.stop()
+if not check_password():
+    st.stop()  # Do not continue if check_password is False
 
+def main():
     st.markdown('<div class="main-header"><h1>📝 Question Paper Generator</h1></div>', 
                 unsafe_allow_html=True)
 
@@ -823,7 +839,6 @@ def main():
             
             # Subject and pattern selection
             col1, col2 = st.columns(2)
-            
             with col1:
                 available_subjects = SEMESTER_SUBJECTS.get(
                     (header_info['academic_level'], header_info['semester']), 
