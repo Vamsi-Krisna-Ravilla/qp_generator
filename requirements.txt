@@ -1,6 +1,9 @@
 streamlit
 pandas
 reportlab
-pillow
+Pillow
 requests
+python-dateutil
+numpy
 openpyxl
+pytz
