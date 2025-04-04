@@ -21,9 +21,9 @@ import secrets
 
 # UI Configuration
 st.set_page_config(
-    page_title="Question Paper Generator",
-    page_icon="📝",
-    layout="wide",
+    page_title="RVIT - Question Paper Generator",
+    page_icon="https://drive.google.com/file/d/1H7KV4rkp5qgbeyugIcDiXKrOmG9COXgt/view?usp=sharing",  # Updated link format
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
@@ -852,8 +852,23 @@ def check_password():
 
     if "password_correct" not in st.session_state:
         # First run, show input for username and password
-        st.markdown('<div class="main-header"><h1>🔐 Login Required</h1></div>', 
-                    unsafe_allow_html=True)
+        st.markdown('''
+    <div style="
+        text-align: center;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    ">
+        <img src="https://i.ytimg.com/vi/MGHP3wS1A5E/sddefault.jpg" width="150" style="border-radius: 8px; margin-bottom: 15px;">
+        <h1 style="
+            margin: 0;
+            font-size: 2.5em;
+            color: #333;
+        ">RVIT : Random Question Paper Generator</h1>
+    </div>
+''', unsafe_allow_html=True)
+
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.button("Log In", on_click=password_entered)
@@ -1092,3 +1107,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
