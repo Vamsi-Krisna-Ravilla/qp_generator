@@ -18,6 +18,7 @@ from reportlab.lib.pdfencrypt import StandardEncryption
 import string
 import random
 import secrets
+from datetime import datetime, timezone, timedelta
 
 # UI Configuration
 st.set_page_config(
@@ -547,7 +548,9 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
     )
     
     # Create a detailed timestamp with date and time
-    current_timestamp = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    #current_timestamp = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    ist_timezone = timezone(timedelta(hours=5, minutes=30))  # IST is UTC+5:30
+    current_timestamp = datetime.now(ist_timezone).strftime("%d-%b-%Y %H:%M:%S IST")
     
     # Initialize document with correct margins, encryption, and timestamp
     doc = CustomDocTemplate(
@@ -861,11 +864,12 @@ def check_password():
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     ">
         <img src="https://i.ytimg.com/vi/MGHP3wS1A5E/sddefault.jpg" width="150" style="border-radius: 8px; margin-bottom: 15px;">
-        <h1 style="
-            margin: 0;
-            font-size: 2.5em;
-            color: #333;
-        ">RVIT : Random Question Paper Generator</h1>
+        <h1 style="margin: 0; font-size: 2.5em; color: #333;">
+            RV Institute of Technology
+        </h1>
+        <h2 style="margin: 5px 0 0; font-size: 1.5em; color: #555;">
+            Random Question Paper Generator
+        </h2>
     </div>
 ''', unsafe_allow_html=True)
 
