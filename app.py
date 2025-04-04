@@ -15,6 +15,9 @@ from datetime import datetime
 import hmac
 import pickle
 from reportlab.lib.pdfencrypt import StandardEncryption
+import string
+import random
+import secrets
 
 # UI Configuration
 st.set_page_config(
@@ -248,7 +251,6 @@ for subject in SubjectType:
 for subject in SubjectType:
     if (subject, ExamType.REGULAR) in PATTERNS:
         PATTERNS[(subject, ExamType.SUPPLY)] = PATTERNS[(subject, ExamType.REGULAR)]
-
 def get_google_drive_file_id(url: str) -> str:
     """Extract file ID from Google Drive URL"""
     patterns = [
@@ -403,6 +405,15 @@ class CustomDocTemplate(SimpleDocTemplate):
         self.topMargin = self.top_margin_rest if self._calc else self.top_margin_first
         return super().handle_pageBegin()
 
+# Function to generate a secure random password
+def generate_secure_password(length=8):
+    """Generate a secure random password"""
+    # Use a mix of uppercase, lowercase, and digits for better security
+    characters = string.ascii_letters + string.digits
+    # Use secrets module for cryptographically strong random numbers
+    password = ''.join(secrets.choice(characters) for _ in range(length))
+    return password
+
 def create_header_config():
     """Create and get header configuration from user input"""
     st.markdown('<div class="section-header"><h2>📝 Paper Configuration</h2></div>', 
@@ -492,17 +503,20 @@ def select_questions(df: pd.DataFrame, subject: SubjectType, exam: ExamType) -> 
             part_b = pd.concat([part_b, questions])
     
     return part_a, part_b
-
 def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame, 
                            subject: SubjectType, exam: ExamType, 
                            header_info: dict, college_logo_url: str,
+                           pdf_password: str = None,
                            max_image_width: int = 410) -> bytes:
     """Generate PDF with header and properly scaled images"""
     buffer = BytesIO()
     
-    # Create encryption object
+    # Use the provided password or generate a new one
+    user_password = pdf_password.encode('utf-8') if pdf_password else generate_secure_password(10).encode('utf-8')
+    
+    # Create encryption object with the unique password
     encryption = StandardEncryption(
-        userPassword='a'.encode('utf-8'),
+        userPassword=user_password,
         ownerPassword='admin123'.encode('utf-8'),
         strength=128,
         canPrint=1,
@@ -657,7 +671,6 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
     # Determine time and marks
     exam_time = "2 Hours" if header_info['exam_type'] in ["I MID", "II MID"] else "3 Hours"
     max_marks = "25M" if header_info['exam_type'] in ["I MID", "II MID"] else "70M"
-
     # Create table for details
     branch_text = f"Branch: {', '.join(header_info['branches'])}"
     date_text = f"Date: {header_info['date']}"
@@ -833,7 +846,6 @@ def check_password():
     else:
         # Password correct
         return True
-
 def main():
     if not check_password():
         st.stop()
@@ -961,6 +973,12 @@ def main():
                     # Select questions
                     part_a, part_b = select_questions(df, subject, exam)
                     
+                    # Generate a unique password for this PDF
+                    unique_password = generate_secure_password(10)  # 10-character password
+                    
+                    # Store the password in session state so we can display it later
+                    st.session_state['current_pdf_password'] = unique_password
+                    
                     # Create tabs
                     tab1, tab2 = st.tabs(["Selected Questions", "Download Options"])
                     
@@ -1002,7 +1020,8 @@ def main():
                         with col1:
                             pdf_bytes = generate_pdf_with_header(
                                 part_a, part_b, subject, exam,
-                                header_info, college_logo_url
+                                header_info, college_logo_url,
+                                pdf_password=unique_password  # Pass the unique password here
                             )
                             st.download_button(
                                 "📄 Download Question Paper (PDF)",
@@ -1010,7 +1029,17 @@ def main():
                                 f"{subject.value}_{exam.value}_question_paper.pdf",
                                 "application/pdf"
                             )
-                            st.info("📝 PDF Password: a")
+                            # Display the unique password to the user
+                            st.info(f"📝 PDF Password: {unique_password}")
+                            
+                            # Add a "Copy Password" button
+                            # if st.button("📋 Copy Password to Clipboard", key="copy_button"):
+                            #     st.write("Password copied!")
+                            #     st.markdown(f"""
+                            #     <script>
+                            #         navigator.clipboard.writeText("{unique_password}");
+                            #     </script>
+                            #     """, unsafe_allow_html=True)
                         
                         with col2:
                             st.download_button(
