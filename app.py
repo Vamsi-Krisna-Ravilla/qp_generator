@@ -392,6 +392,7 @@ class CustomDocTemplate(SimpleDocTemplate):
         self.top_margin_first = kwargs.pop('top_margin_first', 0)
         self.top_margin_rest = kwargs.pop('top_margin_rest', 30)
         self.encryption = kwargs.pop('encryption', None)
+        self.timestamp = kwargs.pop('timestamp', None)  # Add timestamp parameter
         kwargs['topMargin'] = self.top_margin_first
         
         if self.encryption:
@@ -400,9 +401,28 @@ class CustomDocTemplate(SimpleDocTemplate):
         SimpleDocTemplate.__init__(self, *args, **kwargs)
         
     def handle_pageBegin(self):
-        """Modify top margin based on page number"""
+        """Modify top margin based on page number and add timestamp on first page"""
         self._calc = self.canv.getPageNumber() > 1
         self.topMargin = self.top_margin_rest if self._calc else self.top_margin_first
+        
+        # Add timestamp to first page
+        if self.canv.getPageNumber() == 1 and self.timestamp:
+            # Save current state
+            self.canv.saveState()
+            # Set font for timestamp
+            self.canv.setFont('Helvetica-Bold', 8)
+            # Position at bottom right (adjust coordinates as needed)
+            timestamp_text = f"Generated on: {self.timestamp}"
+            # Get width of timestamp text to position properly
+            text_width = self.canv.stringWidth(timestamp_text, 'Helvetica-Bold', 8)
+            # Position text at bottom right with margins
+            self.canv.drawString(self.width + self.leftMargin - text_width, 20, timestamp_text)
+            # Add a small line above timestamp for visual separation
+            self.canv.line(self.width + self.leftMargin - text_width, 30, 
+                          self.width + self.leftMargin, 30)
+            # Restore state
+            self.canv.restoreState()
+            
         return super().handle_pageBegin()
 
 # Function to generate a secure random password
@@ -503,6 +523,7 @@ def select_questions(df: pd.DataFrame, subject: SubjectType, exam: ExamType) -> 
             part_b = pd.concat([part_b, questions])
     
     return part_a, part_b
+
 def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame, 
                            subject: SubjectType, exam: ExamType, 
                            header_info: dict, college_logo_url: str,
@@ -525,7 +546,10 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
         canAnnotate=0
     )
     
-    # Initialize document with correct margins and encryption
+    # Create a detailed timestamp with date and time
+    current_timestamp = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    
+    # Initialize document with correct margins, encryption, and timestamp
     doc = CustomDocTemplate(
         buffer,
         pagesize=A4,
@@ -534,7 +558,8 @@ def generate_pdf_with_header(part_a: pd.DataFrame, part_b: pd.DataFrame,
         rightMargin=30,
         top_margin_first=0,
         top_margin_rest=30,
-        encryption=encryption
+        encryption=encryption,
+        timestamp=current_timestamp  # Pass timestamp to document template
     )
     
     styles = getSampleStyleSheet()
@@ -850,8 +875,14 @@ def main():
     if not check_password():
         st.stop()
 
-    st.markdown('<div class="main-header"><h1>📝 Question Paper Generator</h1></div>', 
-                unsafe_allow_html=True)
+    st.markdown('''
+    <div style="text-align: center;">
+        <img src="https://i.ytimg.com/vi/MGHP3wS1A5E/sddefault.jpg" width="80" style="margin-bottom: 10px;">
+        <h1 style="margin: 0;">Question Paper Generator</h1>
+    </div>
+''', unsafe_allow_html=True)
+
+
 
     with st.expander("ℹ️ Instructions", expanded=False):
         st.markdown("""
